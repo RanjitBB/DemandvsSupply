@@ -674,12 +674,6 @@ def create_heatmap(pivot_df):
     return fig
 
 def generate_summary_from_original_data(df, day, time_slot):
-    column_mapping = {}
-    for col in df.columns:
-        if col.lower() == 'trial request at':
-            column_mapping[col] = 'Trial Request At'
-        
-            
     # Filter the original data to match the selected day and time slot
     # Convert Unix timestamp to IST datetime
     df['Trial Request At'] = pd.to_datetime(df['Trial Request At'], unit='s')  # Convert Unix timestamp to datetime
@@ -967,6 +961,10 @@ def main():
                         - **Percentage** shows surplus/shortage relative to demand: (Supply - Demand) / Demand × 100%
                     """)
 
+             # Display raw data
+            with st.expander("View Raw Data"):
+                st.dataframe(df)
+
             with st.expander("Filter Breakdown"):
                 col1, col2 = st.columns(2)
                 with col1:
@@ -978,14 +976,9 @@ def main():
                     # Day
                     st.markdown("**Day**")
                     days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-                    days = st.selectbox("", days_order, label_visibility="collapsed")
-                summary = generate_summary_from_original_data(df, days, time_slot)
-                st.markdown(summary)
-                    
-                
-            # Display raw data
-            with st.expander("View Raw Data"):
-                st.dataframe(df)
+                    day = st.selectbox("", days_order, label_visibility="collapsed")
+            summary = generate_summary_from_original_data(df, day, time_slot)
+            st.markdown(summary)
             
         else:
             st.warning("No data available for visualization after processing.")
