@@ -673,6 +673,55 @@ def create_heatmap(pivot_df):
     
     return fig
 
+def generate_summary_from_original_data(df, day, time_slot):
+    # Filter the original data to match the selected day and time slot
+    filtered_data = df[(df['Day'] == day) & (df['Time Slot'] == time_slot)]
+
+    if filtered_data.empty:
+        return f"No data available for the selected combination: {day} - {time_slot}"
+
+    # Extract relevant columns
+    summary_columns = [
+        'total_teachers', 'after_previously_mapped_teachers', 'after_teachers_already_mapped_in_current_window', 
+        'after_snoozed_teacher', 'after_ineligible_trial_state', 'after_ineligible_professional_review',
+        'after_disabled_region', 'after_max_open_trials', 'after_paused_on_trial_date',
+        'after_training_version_not_completed', 'after_max_demo_on_trial_day',
+        'total_eligible_teachers', 'availability_matched', 'availability_mismatched'
+    ]
+
+    # Ensure all columns are present in the DataFrame
+    missing_columns = [col for col in summary_columns if col not in filtered_data.columns]
+    if missing_columns:
+        return f"Missing columns: {', '.join(missing_columns)}"
+
+    # Create the summary table with remaining and eliminated tutors
+    summary = {
+        'Filter Stage': summary_columns,
+        'Tutors Remaining': [filtered_data[col].sum() for col in summary_columns],
+        '% of Total': [round((filtered_data[col].sum() / filtered_data['total_teachers'].sum()) * 100, 2) for col in summary_columns],
+        'Eliminated': [filtered_data['total_teachers'].sum() - filtered_data[col].sum() for col in summary_columns]
+    }
+    
+    summary_df = pd.DataFrame(summary)
+    
+    # Primary Bottleneck (find the filter stage with maximum elimination)
+    eliminated_data = {col: filtered_data['total_teachers'].sum() - filtered_data[col].sum() for col in summary_columns}
+    
+    # Find the primary bottleneck (filter with the highest eliminated tutors)
+    primary_bottleneck = max(eliminated_data, key=eliminated_data.get)
+    
+    # Return the summary as a string and DataFrame
+    result = f"### Filter Breakdown: {time_slot} - {day}\n"
+    result += f"Based on {filtered_data['total_teachers'].sum()} unique trial requests | {filtered_data['total_teachers'].sum()} total filter passes\n\n"
+    
+    result += summary_df.to_markdown(index=False)
+    
+    result += f"\n\nPrimary Bottleneck: **{primary_bottleneck}**\n"
+    result += f"Top 3 filters by impact:\n"
+    result += "\n".join([f"{i+1}. {filter_stage}: {eliminated_data[filter_stage]} tutors eliminated" for i, filter_stage in enumerate(sorted(eliminated_data, key=eliminated_data.get, reverse=True)[:3])])
+    
+    return result
+    
 # Main app
 def main():
     # Title
@@ -686,12 +735,12 @@ def main():
         
         with col1:
             st.markdown("**Region**")
-            region_options = ['All', 'NAM', 'APAC', 'EMEA', 'IND-SUB']
+            region_options = ['NAM', 'APAC', 'EMEA', 'IND-SUB']
             region = st.selectbox("Region", region_options, index=region_options.index('NAM'))
 
         with col2:
             st.markdown("**Grade Level**")
-            grade_options = ['All', 'k-2', '3-5', '6-8', '9-10', '11-12']
+            grade_options = ['k-2', '3-5', '6-8', '9-10', '11-12']
             grade_level = st.selectbox("Grade", grade_options, index=grade_options.index('k-2'))
 
         with col3:
@@ -849,10 +898,34 @@ def main():
             # Create and display the heatmap
             fig = create_heatmap(pivot_df)
             st.plotly_chart(fig, use_container_width=True)
-            
+            st.markdown("""
+                        ##### Legend:
+                        - **S**: Supply (eligible tutors)
+                        - **D**: Demand (trial requests)
+                        - **Ratio**: Supply ÷ Demand
+                        - **Percentage** shows surplus/shortage relative to demand: (Supply - Demand) / Demand × 100%
+                    """)
+
+            with st.expander("Filter Breakdown"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    # Time Slot
+                    st.markdown("**Time Slot**")
+                    time_slots_order = ['7 AM - 9 AM','9 AM - 11 AM','11 AM - 1 PM','1 PM - 3 PM','3 PM - 5 PM','5 PM - 7 PM','7 PM - 9 PM','9 PM - 11 PM','11 PM - 1 AM','1 AM - 3 AM','3 AM - 5 AM','5 AM - 7 AM']
+                    time_slot = st.selectbox("", time_slots_order, label_visibility="collapsed")
+                with col2:
+                    # Day
+                    st.markdown("**Day**")
+                    days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                    days = st.selectbox("", days_order, label_visibility="collapsed")
+                summary = generate_summary_from_original_data(df, days, time_slot)
+                st.markdown(summary)
+                    
+                
             # Display raw data
             with st.expander("View Raw Data"):
                 st.dataframe(df)
+            
         else:
             st.warning("No data available for visualization after processing.")
     else:
