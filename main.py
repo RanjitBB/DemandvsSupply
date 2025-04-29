@@ -674,6 +674,12 @@ def create_heatmap(pivot_df):
     return fig
 
 def generate_summary_from_original_data(df, day, time_slot):
+    column_mapping = {}
+    for col in df.columns:
+        if col.lower() == 'trial request at':
+            column_mapping[col] = 'Trial Request At'
+        
+            
     # Filter the original data to match the selected day and time slot
     # Convert Unix timestamp to IST datetime
     df['Trial Request At'] = pd.to_datetime(df['Trial Request At'], unit='s')  # Convert Unix timestamp to datetime
@@ -682,7 +688,7 @@ def generate_summary_from_original_data(df, day, time_slot):
     # Extract day of week and hour
     df['Day'] = df['Trial Request At'].dt.day_name()
     df['Hour'] = df['Trial Request At'].dt.hour
-
+            
     # Create comprehensive time slot mapping for all 24 hours
     hour_to_slot = {
         0: '11 PM - 1 AM',  # 12 AM falls in 11 PM - 1 AM slot
