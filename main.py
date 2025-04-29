@@ -676,8 +676,8 @@ def create_heatmap(pivot_df):
 def generate_summary_from_original_data(df, day, time_slot):
     # Filter the original data to match the selected day and time slot
     # Convert Unix timestamp to IST datetime
-    df['Trial Request At'] = pd.to_datetime(df['Trial Request At'], unit='s')  # Convert Unix timestamp to datetime
-    df['Trial Request At'] = df['Trial Request At'].dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')  # Convert to IST
+    df['trial request at'] = pd.to_datetime(df['trial request at'], unit='s')  # Convert Unix timestamp to datetime
+    df['trial request at'] = df['trial request at'].dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')  # Convert to IST
 
     # Extract day of week and hour
     df['Day'] = df['Trial Request At'].dt.day_name()
