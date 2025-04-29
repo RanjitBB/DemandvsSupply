@@ -675,6 +675,61 @@ def create_heatmap(pivot_df):
 
 def generate_summary_from_original_data(df, day, time_slot):
     # Filter the original data to match the selected day and time slot
+    # Convert Unix timestamp to IST datetime
+    df['Trial Request At'] = pd.to_datetime(df['Trial Request At'], unit='s')  # Convert Unix timestamp to datetime
+    df['Trial Request At'] = df['Trial Request At'].dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')  # Convert to IST
+
+    # Extract day of week and hour
+    df['Day'] = df['Trial Request At'].dt.day_name()
+    df['Hour'] = df['Trial Request At'].dt.hour
+
+    # Create comprehensive time slot mapping for all 24 hours
+    hour_to_slot = {
+        0: '11 PM - 1 AM',  # 12 AM falls in 11 PM - 1 AM slot
+        1: '1 AM - 3 AM',
+        2: '1 AM - 3 AM',
+        3: '3 AM - 5 AM',
+        4: '3 AM - 5 AM',
+        5: '5 AM - 7 AM',
+        6: '5 AM - 7 AM',
+        7: '7 AM - 9 AM',
+        8: '7 AM - 9 AM',
+        9: '9 AM - 11 AM',
+        10: '9 AM - 11 AM',
+        11: '11 AM - 1 PM',
+        12: '11 AM - 1 PM',
+        13: '1 PM - 3 PM',
+        14: '1 PM - 3 PM',
+        15: '3 PM - 5 PM',
+        16: '3 PM - 5 PM',
+        17: '5 PM - 7 PM',
+        18: '5 PM - 7 PM',
+        19: '7 PM - 9 PM',
+        20: '7 PM - 9 PM',
+        21: '9 PM - 11 PM',
+        22: '9 PM - 11 PM',
+        23: '11 PM - 1 AM'
+    }
+    
+    def map_hour_to_slot(hour):
+        if hour is None or pd.isna(hour):
+            # Default to a reasonable time slot instead of 'Other'
+            debug_expander.write(f"WARNING: Found null hour value, defaulting to '7 AM - 9 AM'")
+            return '7 AM - 9 AM'
+        
+        try:
+            hour = int(hour)
+            if hour < 0 or hour > 23:
+                debug_expander.write(f"WARNING: Hour value {hour} out of range, defaulting to '7 AM - 9 AM'")
+                return '7 AM - 9 AM'
+            
+            return hour_to_slot[hour]
+        except (ValueError, TypeError):
+            debug_expander.write(f"WARNING: Invalid hour value {hour}, defaulting to '7 AM - 9 AM'")
+            return '7 AM - 9 AM'
+    
+    df['Time Slot'] = df['Hour'].apply(map_hour_to_slot)
+    
     filtered_data = df[(df['Day'] == day) & (df['Time Slot'] == time_slot)]
 
     if filtered_data.empty:
