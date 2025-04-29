@@ -680,8 +680,8 @@ def generate_summary_from_original_data(df, day, time_slot):
     df['trial request at'] = df['trial request at'].dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')  # Convert to IST
 
     # Extract day of week and hour
-    df['Day'] = df['Trial Request At'].dt.day_name()
-    df['Hour'] = df['Trial Request At'].dt.hour
+    df['Day'] = df['trial request at'].dt.day_name()
+    df['Hour'] = df['trial request at'].dt.hour
             
     # Create comprehensive time slot mapping for all 24 hours
     hour_to_slot = {
