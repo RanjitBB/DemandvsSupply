@@ -682,6 +682,12 @@ def generate_summary_from_original_data(df, day, time_slot):
     for col in df.columns:
         if col.lower() == 'trial request at':
             column_mapping[col] = 'Trial Request At'
+
+    # Create a copy of the dataframe with renamed columns
+    df_renamed = df.copy()
+    df_renamed.rename(columns=column_mapping, inplace=True)
+    # Use the renamed dataframe for further processing
+    df = df_renamed
         
     # Filter the original data to match the selected day and time slot
     # Convert Unix timestamp to IST datetime
