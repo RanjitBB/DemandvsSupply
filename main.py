@@ -674,10 +674,6 @@ def create_heatmap(pivot_df):
     return fig
 
 def generate_summary_from_original_data(df, day, time_slot):
-    # Check if 'Trial Request At' exists in the DataFrame
-    if 'Trial Request At' not in df.columns:
-        return "Error: 'Trial Request At' column is missing from the DataFrame."
-
     column_mapping = {}
     for col in df.columns:
         if col.lower() == 'trial request at':
@@ -688,6 +684,10 @@ def generate_summary_from_original_data(df, day, time_slot):
     df_renamed.rename(columns=column_mapping, inplace=True)
     # Use the renamed dataframe for further processing
     df = df_renamed
+    
+    # Check if 'Trial Request At' exists in the DataFrame
+    if 'Trial Request At' not in df.columns:
+        return "Error: 'Trial Request At' column is missing from the DataFrame."
         
     # Filter the original data to match the selected day and time slot
     # Convert Unix timestamp to IST datetime
