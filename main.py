@@ -674,14 +674,26 @@ def create_heatmap(pivot_df):
     return fig
 
 def generate_summary_from_original_data(df, day, time_slot):
+    # Check if 'Trial Request At' exists in the DataFrame
+    if 'Trial Request At' not in df.columns:
+        return "Error: 'Trial Request At' column is missing from the DataFrame."
+
+    column_mapping = {}
+    for col in df.columns:
+        if col.lower() == 'trial request at':
+            column_mapping[col] = 'Trial Request At'
+        
     # Filter the original data to match the selected day and time slot
     # Convert Unix timestamp to IST datetime
-    df['trial request at'] = pd.to_datetime(df['trial request at'], unit='s')  # Convert Unix timestamp to datetime
-    df['trial request at'] = df['trial request at'].dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')  # Convert to IST
+    try:
+        df['Trial Request At'] = pd.to_datetime(df['Trial Request At'], unit='s')  # Convert Unix timestamp to datetime
+        df['Trial Request At'] = df['Trial Request At'].dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')  # Convert to IST
+    except KeyError:
+        return "'Trial Request At' column is not in expected format or missing."
 
     # Extract day of week and hour
-    df['Day'] = df['trial request at'].dt.day_name()
-    df['Hour'] = df['trial request at'].dt.hour
+    df['Day'] = df['Trial Request At'].dt.day_name()
+    df['Hour'] = df['Trial Request At'].dt.hour
             
     # Create comprehensive time slot mapping for all 24 hours
     hour_to_slot = {
