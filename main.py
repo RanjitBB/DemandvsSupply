@@ -130,24 +130,32 @@ def get_filtered_data(region, grade_level, time_period, assignment_round, tutor_
     all_sets AS (
       SELECT
         id,   trial_id, created_on, trial_slot, region, grade_group, round_name, 'training_complete_tutors_with_zero_trials' as tutor_set_name ,
+        round_data.total_teachers as total_teachers,
+        round_data.after_ineligible_trial_state as after_ineligible_trial_state,
         round_data.training_complete_tutors_with_zero_trials AS tutor_data
       FROM all_rounds
       WHERE round_data.training_complete_tutors_with_zero_trials.can_map is null
       UNION ALL
       SELECT
         id,   trial_id, created_on, trial_slot, region, grade_group, round_name, 'training_complete_tutors_with_one_or_two_trials' as tutor_set_name,
+        round_data.total_teachers as total_teachers,
+        round_data.after_ineligible_trial_state as after_ineligible_trial_state,
         round_data.training_complete_tutors_with_one_or_two_trials AS tutor_data
       FROM all_rounds
       WHERE round_data.training_complete_tutors_with_one_or_two_trials.can_map is null
       UNION ALL
       SELECT
         id,   trial_id, created_on, trial_slot, region, grade_group, round_name, 'active_tutors_older_version_training' AS tutor_set_name,
+        round_data.total_teachers as total_teachers,
+        round_data.after_ineligible_trial_state as after_ineligible_trial_state,
         round_data.active_tutors_older_version_training AS tutor_data
       FROM all_rounds
       WHERE round_data.active_tutors_older_version_training.can_map is null
       UNION ALL
       SELECT
         id,   trial_id, created_on, trial_slot, region, grade_group, round_name, 'active_tutors_latest_version_training' as tutor_set_name,
+        round_data.total_teachers as total_teachers,
+        round_data.after_ineligible_trial_state as after_ineligible_trial_state,
         round_data.active_tutors_latest_version_training AS tutor_data
       FROM all_rounds
       WHERE round_data.active_tutors_latest_version_training.can_map is null
@@ -162,6 +170,8 @@ def get_filtered_data(region, grade_level, time_period, assignment_round, tutor_
       grade_group AS "Trial Grade",
       round_name AS "Assignment Round",
       tutor_set_name AS "Tutor Set Name",
+      total_teachers as total_teacher_in_region_grade_group,
+      after_ineligible_trial_state,
       tutor_data.total_teachers::INT AS total_teachers,
       tutor_data.after_previously_mapped_teachers,
       tutor_data.after_teachers_already_mapped_in_current_window,
@@ -177,6 +187,7 @@ def get_filtered_data(region, grade_level, time_period, assignment_round, tutor_
       tutor_data.availability_mismatched
 
 FROM all_sets 
+
   """
     
     # Calculate date range based on time period
@@ -291,7 +302,7 @@ def process_data_for_heatmap(df, supply_metric='availability_matched'):
     
     # Convert all numeric columns to int
     numeric_columns = [
-        'total_teachers', 'after_previously_mapped_teachers',
+        'total_teacher_in_region_grade_group','after_ineligible_trial_state','total_teachers', 'after_previously_mapped_teachers',
         'after_teachers_already_mapped_in_current_window', 'after_snoozed_teacher',
         'after_ineligible_trial_state', 'after_ineligible_professional_review',
         'after_disabled_region', 'after_max_open_trials', 'after_paused_on_trial_date',
@@ -755,7 +766,7 @@ def generate_summary_from_original_data(df, day, time_slot):
 
     # Extract relevant columns
     summary_columns = [
-        'total_teachers', 'after_previously_mapped_teachers', 'after_teachers_already_mapped_in_current_window', 
+        'total_teacher_in_region_grade_group','after_ineligible_trial_state','total_teachers', 'after_previously_mapped_teachers', 'after_teachers_already_mapped_in_current_window', 
         'after_snoozed_teacher', 'after_ineligible_trial_state', 'after_ineligible_professional_review',
         'after_disabled_region', 'after_max_open_trials', 'after_paused_on_trial_date',
         'after_training_version_not_completed', 'after_max_demo_on_trial_day',
@@ -824,20 +835,21 @@ def main():
         with col4:
             st.markdown("**Supply Metric**")
             supply_metrics = {
-                'availability_matched': 'Availability Matched',
+                'total_teacher_in_region_grade_group': 'Teacher In Region-Grade Group',
+                'after_ineligible_trial_state': 'After Ineligible Trial State,
                 'total_teachers': 'Total Teachers',
-                'total_eligible_teachers': 'Total Eligible Teachers',
                 'after_previously_mapped_teachers': 'After Previously Mapped',
-                'after_teachers_already_mapped_in_current_window': 'After Already Mapped',
+                'after_teachers_already_mapped_in_current_window': 'After Currently Mapped',
                 'after_snoozed_teacher': 'After Snoozed',
-                'after_ineligible_trial_state': 'After Ineligible Trial',
                 'after_ineligible_professional_review': 'After Ineligible Review',
                 'after_disabled_region': 'After Disabled Region',
                 'after_max_open_trials': 'After Max Open Trials',
                 'after_paused_on_trial_date': 'After Paused',
                 'after_training_version_not_completed': 'After Training Not Complete',
-                'after_max_demo_on_trial_day': 'After Max Demo',
-                'availability_mismatched': 'Availability Mismatched'
+                'after_max_demo_on_trial_day': 'After Max Demo On Trial Day',
+                'total_eligible_teachers': 'Total Eligible Teachers',
+                'availability_mismatched': 'Availability Mismatched',
+                'availability_matched': 'Availability Matched'
             }
             supply_metric = st.selectbox(
                 "Supply Metric",
@@ -854,7 +866,7 @@ def main():
         with col1:
             # Assignment Round filter
             st.markdown("**Assignment Round**")
-            assignment_round_options = ['All', 'assignment_round_1', 'assignment_round_2', 'assignment_round_3', 'assignment_round_4', 'assignment_round_5']
+            assignment_round_options = ['assignment_round_1']
             assignment_round = st.selectbox("", assignment_round_options, label_visibility="collapsed")
         
         with col2:
@@ -914,6 +926,8 @@ def main():
                         'Trial Region': region,
                         'Trial Grade': grade_level,
                         # Add all supply metrics with slightly different values
+                        'total_teacher_in_region_grade_group': supply + np.random.randint(-5, 5),
+                        after_ineligible_trial_state: supply + np.random.randint(-5, 5),
                         'availability_matched': supply,
                         'total_teachers': supply + np.random.randint(-5, 5),
                         'total_eligible_teachers': supply + np.random.randint(-3, 3),
