@@ -836,7 +836,7 @@ def main():
             st.markdown("**Supply Metric**")
             supply_metrics = {
                 'total_teacher_in_region_grade_group': 'Teacher In Region-Grade Group',
-                'after_ineligible_trial_state': 'After Ineligible Trial State,
+                'after_ineligible_trial_state': 'After Ineligible Trial State',
                 'total_teachers': 'Total Teachers',
                 'after_previously_mapped_teachers': 'After Previously Mapped',
                 'after_teachers_already_mapped_in_current_window': 'After Currently Mapped',
