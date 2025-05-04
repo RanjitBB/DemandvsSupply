@@ -37,7 +37,6 @@ def connect_to_redshift():
             'database': os.getenv('DB_DATABASE'),
             'user': os.getenv('DB_USER')
         }
-        st.sidebar.write("Connection parameters:", conn_debug)
         
         # Attempt connection
         conn = psycopg2.connect(
@@ -284,7 +283,7 @@ FROM all_sets
         return pd.DataFrame()
 
 # Function to process data for heatmap
-def process_data_for_heatmap(df, supply_metric='availability_matched'):
+def process_data_for_heatmap(df, supply_metric='availability_matched',tutor_set_name='All'):
     if df.empty:
         return pd.DataFrame()
 
@@ -359,9 +358,7 @@ def process_data_for_heatmap(df, supply_metric='availability_matched'):
     # Extract day of week and hour
     df['Day'] = df['Trial Request At'].dt.day_name()
     df['Hour'] = df['Trial Request At'].dt.hour
-    
 
-    
     # Create comprehensive time slot mapping for all 24 hours
     hour_to_slot = {
         0: '11 PM - 1 AM',  # 12 AM falls in 11 PM - 1 AM slot
@@ -462,8 +459,20 @@ def process_data_for_heatmap(df, supply_metric='availability_matched'):
     debug_expander.write(f"Total supply: {df['supply_value'].sum()}")
     
     # Calculate supply (average of supply_value)
-    supply_df = df.groupby(['Day', 'Time Slot'])['supply_value'].mean().reset_index()
-    supply_df.rename(columns={'supply_value': 'Supply'}, inplace=True)
+    if tutor_set_name == 'All':
+        # First, sum supply_value within each (assessment_id, trial_id, Day, Time Slot)
+        temp_df = df.groupby(['assessment_id', 'Trial Request At','Day', 'Time Slot'])['supply_value'].sum().reset_index()
+        
+        # Then, take the mean grouped by Day and Time Slot
+        supply_df = temp_df.groupby(['Day', 'Time Slot'])['supply_value'].mean().reset_index()
+        supply_df.rename(columns={'supply_value': 'Supply'}, inplace=True)
+    else:
+        # Your original code
+        supply_df = df.groupby(['Day', 'Time Slot'])['supply_value'].mean().reset_index()
+        supply_df.rename(columns={'supply_value': 'Supply'}, inplace=True)
+
+    # supply_df = df.groupby(['Day', 'Time Slot'])['supply_value'].mean().reset_index()
+    # supply_df.rename(columns={'supply_value': 'Supply'}, inplace=True)
     
     debug_expander.write("### Supply Calculation")
     debug_expander.write("Grouped by Day and Time Slot:")
@@ -520,7 +529,7 @@ def process_data_for_heatmap(df, supply_metric='availability_matched'):
     existing_columns = [col for col in column_order if col in pivot_df.columns]
     pivot_df = pivot_df[existing_columns]
     
-    return pivot_df
+    return pivot_df, result_df
 
 # Function to create heatmap
 def create_heatmap(pivot_df):
@@ -684,128 +693,160 @@ def create_heatmap(pivot_df):
     
     return fig
 
-def generate_summary_from_original_data(df, day, time_slot):
-    column_mapping = {}
-    for col in df.columns:
-        if col.lower() == 'trial request at':
-            column_mapping[col] = 'Trial Request At'
+def generate_summary_from_original_data(df, day, time_slot,tutor_set_name='All'):
+    if df.empty:
+        return pd.DataFrame()
 
-    # Create a copy of the dataframe with renamed columns
-    df_renamed = df.copy()
-    df_renamed.rename(columns=column_mapping, inplace=True)
-    # Use the renamed dataframe for further processing
-    df = df_renamed
-    
-    # Check if 'Trial Request At' exists in the DataFrame
-    if 'Trial Request At' not in df.columns:
-        return "Error: 'Trial Request At' column is missing from the DataFrame."
-        
-    # Filter the original data to match the selected day and time slot
-    # Convert Unix timestamp to IST datetime
-    try:
-        df['Trial Request At'] = pd.to_datetime(df['Trial Request At'], unit='s')  # Convert Unix timestamp to datetime
-        df['Trial Request At'] = df['Trial Request At'].dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')  # Convert to IST
-    except KeyError:
-        return "'Trial Request At' column is not in expected format or missing."
-
-    # Extract day of week and hour
-    df['Day'] = df['Trial Request At'].dt.day_name()
-    df['Hour'] = df['Trial Request At'].dt.hour
-            
-    # Create comprehensive time slot mapping for all 24 hours
-    hour_to_slot = {
-        0: '11 PM - 1 AM',  # 12 AM falls in 11 PM - 1 AM slot
-        1: '1 AM - 3 AM',
-        2: '1 AM - 3 AM',
-        3: '3 AM - 5 AM',
-        4: '3 AM - 5 AM',
-        5: '5 AM - 7 AM',
-        6: '5 AM - 7 AM',
-        7: '7 AM - 9 AM',
-        8: '7 AM - 9 AM',
-        9: '9 AM - 11 AM',
-        10: '9 AM - 11 AM',
-        11: '11 AM - 1 PM',
-        12: '11 AM - 1 PM',
-        13: '1 PM - 3 PM',
-        14: '1 PM - 3 PM',
-        15: '3 PM - 5 PM',
-        16: '3 PM - 5 PM',
-        17: '5 PM - 7 PM',
-        18: '5 PM - 7 PM',
-        19: '7 PM - 9 PM',
-        20: '7 PM - 9 PM',
-        21: '9 PM - 11 PM',
-        22: '9 PM - 11 PM',
-        23: '11 PM - 1 AM'
-    }
-    
-    def map_hour_to_slot(hour):
-        if hour is None or pd.isna(hour):
-            # Default to a reasonable time slot instead of 'Other'
-            debug_expander.write(f"WARNING: Found null hour value, defaulting to '7 AM - 9 AM'")
-            return '7 AM - 9 AM'
-        
-        try:
-            hour = int(hour)
-            if hour < 0 or hour > 23:
-                debug_expander.write(f"WARNING: Hour value {hour} out of range, defaulting to '7 AM - 9 AM'")
-                return '7 AM - 9 AM'
-            
-            return hour_to_slot[hour]
-        except (ValueError, TypeError):
-            debug_expander.write(f"WARNING: Invalid hour value {hour}, defaulting to '7 AM - 9 AM'")
-            return '7 AM - 9 AM'
-    
-    df['Time Slot'] = df['Hour'].apply(map_hour_to_slot)
-    
-    filtered_data = df[(df['Day'] == day) & (df['Time Slot'] == time_slot)]
-
-    if filtered_data.empty:
-        return f"No data available for the selected combination: {day} - {time_slot}"
-
-    # Extract relevant columns
-    summary_columns = [
-        'total_teacher_in_region_grade_group','after_ineligible_trial_state','total_teachers', 'after_previously_mapped_teachers', 'after_teachers_already_mapped_in_current_window', 
-        'after_snoozed_teacher', 'after_ineligible_trial_state', 'after_ineligible_professional_review',
+    # Define numeric columns
+    numeric_columns = [
+        'total_teacher_in_region_grade_group', 'after_ineligible_trial_state', 'total_teachers', 'after_previously_mapped_teachers',
+        'after_teachers_already_mapped_in_current_window', 'after_snoozed_teacher',
+        'after_ineligible_professional_review',
         'after_disabled_region', 'after_max_open_trials', 'after_paused_on_trial_date',
         'after_training_version_not_completed', 'after_max_demo_on_trial_day',
         'total_eligible_teachers', 'availability_matched', 'availability_mismatched'
     ]
 
-    # Ensure all columns are present in the DataFrame
-    missing_columns = [col for col in summary_columns if col not in filtered_data.columns]
-    if missing_columns:
-        return f"Missing columns: {', '.join(missing_columns)}"
+    # Convert all numeric columns to int
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-    # Create the summary table with remaining and eliminated tutors
-    summary = {
-        'Filter Stage': summary_columns,
-        'Tutors Remaining': [filtered_data[col].sum() for col in summary_columns],
-        '% of Total': [round((filtered_data[col].sum() / filtered_data['total_teachers'].sum()) * 100, 2) for col in summary_columns],
-        'Eliminated': [filtered_data['total_teachers'].sum() - filtered_data[col].sum() for col in summary_columns]
+    # Rename columns to standard format
+    column_mapping = {}
+    for col in df.columns:
+        if col.lower() == 'trial request at':
+            column_mapping[col] = 'Trial Request At'
+        elif col.lower() == 'assessment_id':
+            column_mapping[col] = 'assessment_id'
+
+    df = df.rename(columns=column_mapping)
+
+    # Convert 'Trial Request At' to datetime
+    df['Trial Request At'] = pd.to_datetime(df['Trial Request At'], unit='s')
+    df['Trial Request At'] = df['Trial Request At'].dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')
+
+    # Extract day and time slot
+    df['Day'] = df['Trial Request At'].dt.day_name()
+    df['Hour'] = df['Trial Request At'].dt.hour
+
+    # Map hour to time slot
+    hour_to_slot = {
+        0: '11 PM - 1 AM', 1: '1 AM - 3 AM', 2: '1 AM - 3 AM',
+        3: '3 AM - 5 AM', 4: '3 AM - 5 AM', 5: '5 AM - 7 AM',
+        6: '5 AM - 7 AM', 7: '7 AM - 9 AM', 8: '7 AM - 9 AM',
+        9: '9 AM - 11 AM', 10: '9 AM - 11 AM', 11: '11 AM - 1 PM',
+        12: '11 AM - 1 PM', 13: '1 PM - 3 PM', 14: '1 PM - 3 PM',
+        15: '3 PM - 5 PM', 16: '3 PM - 5 PM', 17: '5 PM - 7 PM',
+        18: '5 PM - 7 PM', 19: '7 PM - 9 PM', 20: '7 PM - 9 PM',
+        21: '9 PM - 11 PM', 22: '9 PM - 11 PM', 23: '11 PM - 1 AM'
     }
+
+    df['Time Slot'] = df['Hour'].apply(lambda x: hour_to_slot.get(x, '7 AM - 9 AM'))
+
+    # Create supply_df with aggregated numeric columns
+    if tutor_set_name == 'All':
+        # First, group at detailed level and sum numeric columns
+        temp_df = df.groupby(['assessment_id', 'trial_id', 'Day', 'Time Slot'])[numeric_columns].sum().reset_index()
+        # Then, group by Day and Time Slot and calculate mean for each numeric column
+        supply_df = temp_df.groupby(['Day', 'Time Slot'])[numeric_columns].mean().reset_index()
+    else:
+        # Directly group by Day and Time Slot and calculate mean
+        supply_df = df.groupby(['Day', 'Time Slot'])[numeric_columns].mean().reset_index()
+
+    # Filter for the given day and time slot
+    filtered_row = supply_df[(supply_df['Day'] == day) & (supply_df['Time Slot'] == time_slot)]
+
+    if filtered_row.empty:
+        return f"No data available for the selected combination: {day} - {time_slot}"
+
+    # Extract values as a list (first row)
+    tutors_remaining = [filtered_row[col].values[0] for col in numeric_columns]
+
+    # Build the summary table
+    summary_table = pd.DataFrame({
+        'Filter Stage': numeric_columns,
+        'Tutors Remaining': tutors_remaining
+    })
+
+    # Calculate % of Total (relative to the first row)
+    total_base = tutors_remaining[0] if tutors_remaining[0] != 0 else 1  # Avoid division by zero
+    summary_table['% of Total'] = [(x / total_base) * 100 for x in tutors_remaining]
+
+    # Calculate Eliminated (difference between consecutive rows)
+    eliminated = [0]  # First row has no eliminated count
+    for i in range(1, len(tutors_remaining)):
+        eliminated.append(tutors_remaining[i - 1] - tutors_remaining[i])
+    summary_table['Eliminated'] = eliminated
+
+    return summary_table
+
+
+def generate_bottleneck_markdown(summary_df):
+    # Safety check: make sure columns exist
+    if summary_df.empty or 'Eliminated' not in summary_df.columns:
+        return "No data available to generate bottleneck summary."
+
+    # Find the primary bottleneck (max eliminated)
+    primary_row = summary_df.iloc[summary_df['Eliminated'].idxmax()]
+    primary_filter = primary_row['Filter Stage']
+    primary_eliminated = int(primary_row['Eliminated'])
     
-    summary_df = pd.DataFrame(summary)
-    
-    # Primary Bottleneck (find the filter stage with maximum elimination)
-    eliminated_data = {col: filtered_data['total_teachers'].sum() - filtered_data[col].sum() for col in summary_columns}
-    
-    # Find the primary bottleneck (filter with the highest eliminated tutors)
-    primary_bottleneck = max(eliminated_data, key=eliminated_data.get)
-    
-    # Return the summary as a string and DataFrame
-    result = f"### Filter Breakdown: {time_slot} - {day}\n"
-    result += f"Based on {filtered_data['total_teachers'].sum()} unique trial requests | {filtered_data['total_teachers'].sum()} total filter passes\n\n"
-    
-    result += summary_df.to_markdown(index=False)
-    
-    result += f"\n\nPrimary Bottleneck: **{primary_bottleneck}**\n"
-    result += f"Top 3 filters by impact:\n"
-    result += "\n".join([f"{i+1}. {filter_stage}: {eliminated_data[filter_stage]} tutors eliminated" for i, filter_stage in enumerate(sorted(eliminated_data, key=eliminated_data.get, reverse=True)[:3])])
-    
-    return result
-    
+    # Get index of the primary filter to calculate % relative to the previous stage
+    idx = summary_df.index[summary_df['Eliminated'].idxmax()]
+    if idx == 0:
+        percent_loss = 0  # First row cannot have percent loss
+    else:
+        previous_remaining = summary_df.iloc[idx - 1]['Tutors Remaining']
+        percent_loss = (primary_eliminated / previous_remaining) * 100 if previous_remaining != 0 else 0
+
+    # Top 3 filters by impact (sorted by Eliminated descending)
+    top_3 = summary_df.sort_values(by='Eliminated', ascending=False).head(3)
+
+    # Build markdown string
+    md = f"**Primary Bottleneck:**\n\n"
+    md += f"{primary_filter} is the primary bottleneck, eliminating {primary_eliminated} tutors "
+    md += f"({percent_loss:.0f}% of eligible tutors before this filter).\n\n"
+
+    md += "**Top 3 filters by impact:**\n"
+    for _, row in top_3.iterrows():
+        md += f"- {row['Filter Stage']}: {int(row['Eliminated'])} tutors eliminated\n"
+
+    return md
+
+def calculate_average_gap(result_df):
+    if result_df.empty:
+        return "No data available to calculate the average gap."
+
+    # Filter out rows where Demand == 0
+    valid_rows = result_df[result_df['Demand'] > 0]
+
+    if valid_rows.empty:
+        return "No valid data points (Demand > 0) to calculate average gap."
+
+    # Calculate the average of 'Percentage'
+    avg_gap = valid_rows['Percentage'].mean()
+
+    return avg_gap
+
+def count_high_shortage_slots(result_df, threshold=-50):
+    if result_df.empty or 'Percentage' not in result_df.columns:
+        return 0  # Or None / a message if you prefer
+
+    count = result_df[
+        (result_df['Demand'] > 0) & 
+        (result_df['Percentage'] < threshold)
+    ].shape[0]
+
+    return count
+
+def get_max_trials_requested_count(result_df):
+    if result_df.empty or 'Demand' not in result_df.columns:
+        return 0  # Or None if you prefer
+
+    max_demand = int(result_df['Demand'].max())
+    return max_demand
+
 # Main app
 def main():
     # Title
@@ -927,7 +968,7 @@ def main():
                         'Trial Grade': grade_level,
                         # Add all supply metrics with slightly different values
                         'total_teacher_in_region_grade_group': supply + np.random.randint(-5, 5),
-                        after_ineligible_trial_state: supply + np.random.randint(-5, 5),
+                        'after_ineligible_trial_state': supply + np.random.randint(-5, 5),
                         'availability_matched': supply,
                         'total_teachers': supply + np.random.randint(-5, 5),
                         'total_eligible_teachers': supply + np.random.randint(-3, 3),
@@ -951,7 +992,7 @@ def main():
     # Process and display data
     if not df.empty:
         # Process data for heatmap using selected supply metric
-        pivot_df = process_data_for_heatmap(df, supply_metric=supply_metric)
+        pivot_df, result_df = process_data_for_heatmap(df, supply_metric=supply_metric, tutor_set_name=tutor_set_name)
         
         if not pivot_df.empty:
             # Display heatmap title
@@ -1009,8 +1050,77 @@ def main():
                     st.markdown("**Day**")
                     days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
                     day = st.selectbox("", days_order, label_visibility="collapsed")
-            summary = generate_summary_from_original_data(df, day, time_slot)
-            st.markdown(summary)
+                try:
+                    summary = generate_summary_from_original_data(df, day, time_slot,tutor_set_name)
+                    st.dataframe(summary)
+                    st.markdown(generate_bottleneck_markdown(summary))
+                except:
+                    st.markdown("No data available for the filter")
+
+                
+            try:
+                avg_gap_markdown = calculate_average_gap(result_df)
+                st.markdown(
+                    f"""
+                    <div style="
+                        border: 2px solid #4CAF50;
+                        padding: 15px;
+                        border-radius: 10px;
+                        background-color: #f9f9f9;
+                        color: #333;
+                    ">
+                    <h6>Overall Supply-Demand</h6>
+                    <h4>{avg_gap_markdown:.1f}%</h4>
+                    Average gap across all slots
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            except:
+                pass
+
+            try:
+                high_shortage_count = count_high_shortage_slots(result_df)
+                st.markdown(
+                    f"""
+                    <div style="
+                        border: 2px solid #FF6B81;
+                        padding: 15px;
+                        border-radius: 10px;
+                        background-color: #f9f9f9;
+                        color: #333;
+                    ">
+                    <h6>Critical Shortages</h6>
+                    <h4>{high_shortage_count}</h4>
+                    Time slots with >50% shortage
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            except:
+                pass
+
+            try:
+                max_trials = get_max_trials_requested_count(result_df)
+                st.markdown(
+                    f"""
+                    <div style="
+                        border: 2px solid #FFB300;
+                        padding: 15px;
+                        border-radius: 10px;
+                        background-color: #f9f9f9;
+                        color: #333;
+                    ">
+                    <h6>Peak Trial Demand</h6>
+                    <h4>{max_trials}</h4>
+                    Maximum trials requested in a time slot
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            except:
+                pass
+
             
         else:
             st.warning("No data available for visualization after processing.")
