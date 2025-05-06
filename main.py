@@ -94,6 +94,7 @@ def get_filtered_data(region, grade_level, time_period, assignment_round, tutor_
         meta
       FROM application_service_teacher.auto_mapping_trial_request
       WHERE created_on >= '{start_date}'
+      AND created_on < '{end_date}'
     ),
     all_rounds AS (
       SELECT
@@ -192,6 +193,7 @@ FROM all_sets
     # Calculate date range based on time period
     today = datetime.now().date()
     yesterday = today - timedelta(days=1)
+    end_date = today
     
     if time_period == 'Current Week':
         start_date = yesterday - timedelta(days=6)
@@ -204,7 +206,7 @@ FROM all_sets
     filters = []
     
     # Replace placeholder in base query
-    query = query.format(start_date=start_date)
+    query = query.format(start_date=start_date, end_date=end_date)
     
     # Add WHERE clause if there are filters
     if region != 'All':
